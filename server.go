@@ -142,8 +142,12 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) grange.Clust
 
 	for key, value := range yaml {
 		switch value.(type) {
+    case nil:
+			c[key] = []string{}
 		case string:
 			c[key] = []string{value.(string)}
+    case int:
+			c[key] = []string{fmt.Sprintf("%i", value.(int))}
 		case []interface{}:
 			result := []string{}
 
@@ -151,6 +155,8 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) grange.Clust
 				switch x.(type) {
 				case string:
 					result = append(result, fmt.Sprintf("%s", x))
+				case int:
+					result = append(result, fmt.Sprintf("%i", x))
 				default:
 					Warn("Discarding invalid value '%v' in %%%s:%s",
 						x, clusterName, key)
