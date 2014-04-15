@@ -130,7 +130,11 @@ func loadState() {
 		if len(c) == 0 {
 			Warn("%%%s is empty, discarding", name)
 		} else {
-			grange.AddCluster(state, name, c)
+			if name == "GROUPS" {
+				grange.SetGroups(&state, c)
+			} else {
+				grange.AddCluster(&state, name, c)
+			}
 		}
 	}
 }
@@ -142,11 +146,11 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) grange.Clust
 
 	for key, value := range yaml {
 		switch value.(type) {
-    case nil:
+		case nil:
 			c[key] = []string{}
 		case string:
 			c[key] = []string{value.(string)}
-    case int:
+		case int:
 			c[key] = []string{fmt.Sprintf("%i", value.(int))}
 		case []interface{}:
 			result := []string{}
