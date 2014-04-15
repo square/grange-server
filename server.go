@@ -4,12 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"gopkg.in/v1/yaml"
 
@@ -42,44 +41,38 @@ func init() {
 }
 
 func main() {
-	log.Printf("Hello friends, server starting...")
+	Info("Hello friends, server starting...")
 
 	loadState()
 	httpAddr := fmt.Sprintf(":%v", port)
 
 	if parse {
-		log.Printf("Not starting server because of -parse option")
+		Info("Not starting server because of -parse option")
 	} else {
-		log.Printf("Listening to %v", httpAddr)
+		Info("Listening to %v", httpAddr)
 
 		http.HandleFunc("/", rootHandler)
-		log.Fatal(http.ListenAndServe(httpAddr, logRequests(http.DefaultServeMux)))
+		Fatal("Server crashed: %s",
+			http.ListenAndServe(httpAddr, logRequests(http.DefaultServeMux)))
+		os.Exit(1)
 	}
-}
-
-func trace(s string) (string, time.Time) {
-	return s, time.Now()
-}
-
-func un(s string, startTime time.Time) {
-	endTime := time.Now()
-	log.Printf("%s in %.4fs", s, endTime.Sub(startTime).Seconds())
 }
 
 func logRequests(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q, _ := url.QueryUnescape(r.URL.RawQuery)
-		log.Printf("%s %s", r.RemoteAddr, q)
+		Info("QUERY %s %s", r.RemoteAddr, q)
 		handler.ServeHTTP(w, r)
 	})
 }
 
 func loadState() {
-	defer un(trace("Loaded YAML"))
+	Info("Start YAML load")
 
 	state = grange.NewState()
+	dir := "clusters" // TODO: Configurable
 
-	files, _ := ioutil.ReadDir("./clusters") // TODO: Configurable
+	files, _ := ioutil.ReadDir(dir)
 	for _, f := range files {
 		basename := f.Name()
 		ext := filepath.Ext(basename)
@@ -87,18 +80,21 @@ func loadState() {
 			continue
 		}
 		name := strings.TrimSuffix(basename, ext)
+		fullpath := dir + "/" + basename
+		Debug("Loading %%%s from %s", name, fullpath)
 
-		dat, _ := ioutil.ReadFile("clusters/" + basename)
+		dat, _ := ioutil.ReadFile(fullpath) // TODO: Cross-platform file join?
 
 		m := make(map[string]interface{})
 		_ = yaml.Unmarshal(dat, &m)
 		c := yamlToCluster(name, m)
 		if len(c) == 0 {
-			log.Printf("%%%s is empty, discarding", name)
+			Warn("%%%s is empty, discarding", name)
 		} else {
 			grange.AddCluster(state, name, c)
 		}
 	}
+	Info("Finish YAML load")
 }
 
 // Converts a generic YAML map to a cluster by extracting all the correctly
@@ -118,13 +114,13 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) grange.Clust
 				case string:
 					result = append(result, fmt.Sprintf("%s", x))
 				default:
-					log.Printf("Discarding invalid value '%v' in %%%s:%s",
+					Warn("Discarding invalid value '%v' in %%%s:%s",
 						x, clusterName, key)
 				}
 			}
 			c[key] = result
 		default:
-			log.Printf("Discarding invalid key %%%s:%s", clusterName, key)
+			Warn("Discarding invalid key %%%s:%s", clusterName, key)
 		}
 	}
 	return c
