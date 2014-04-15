@@ -24,6 +24,18 @@ func Warn(msg string, args ...interface{})  { logAt(WARN, "WARN", msg, args...) 
 func Info(msg string, args ...interface{})  { logAt(INFO, "INFO", msg, args...) }
 func Debug(msg string, args ...interface{}) { logAt(DEBUG, "DEBUG", msg, args...) }
 
+func setLogLevel(level string) {
+	switch level {
+	case "DEBUG":
+		logLevel = DEBUG
+	case "INFO":
+		logLevel = INFO
+	case "WARN":
+		logLevel = WARN
+	case "FATAL":
+		logLevel = FATAL
+	}
+}
 func logAt(level int, tag string, msg string, args ...interface{}) {
 	if logLevel < level {
 		return

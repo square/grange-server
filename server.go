@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"gopkg.in/v1/yaml"
 
@@ -16,9 +18,11 @@ import (
 )
 
 var (
-	port  int
-	parse bool
-	state grange.RangeState
+	currentConfig serverConfig
+	port          int
+	parse         bool
+	state         grange.RangeState
+	configPath    string
 )
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
@@ -42,9 +46,13 @@ func init() {
 
 func main() {
 	Info("Hello friends, server starting...")
+	configPath = "grange.yaml" // TODO: Read from command line
 
+	loadConfig(configPath)
 	loadState()
 	httpAddr := fmt.Sprintf(":%v", port)
+
+	go handleSignals()
 
 	if parse {
 		Info("Not starting server because of -parse option")
@@ -58,6 +66,37 @@ func main() {
 	}
 }
 
+// Dynamically reloadable server configuration.
+type serverConfig struct {
+	loglevel string
+}
+
+func handleSignals() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP)
+	for sig := range c {
+		switch sig {
+		case syscall.SIGHUP:
+			Info("Reloading config in response to HUP")
+			loadConfig(configPath)
+		}
+	}
+}
+
+func loadConfig(path string) {
+	dat, err := ioutil.ReadFile(path) // TODO: error handling
+	if err != nil {
+		panic(err)
+	}
+	var config map[string]interface{} // TODO: Why can't deserialize directly into config struct?
+	_ = yaml.Unmarshal(dat, &config)
+
+	// TODO: Validate config
+
+	currentConfig.loglevel = config["loglevel"].(string)
+	setLogLevel(currentConfig.loglevel)
+}
+
 func logRequests(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q, _ := url.QueryUnescape(r.URL.RawQuery)
@@ -67,7 +106,7 @@ func logRequests(handler http.Handler) http.Handler {
 }
 
 func loadState() {
-	Info("Start YAML load")
+	Info("Loading state from YAML")
 
 	state = grange.NewState()
 	dir := "clusters" // TODO: Configurable
@@ -94,7 +133,6 @@ func loadState() {
 			grange.AddCluster(state, name, c)
 		}
 	}
-	Info("Finish YAML load")
 }
 
 // Converts a generic YAML map to a cluster by extracting all the correctly
