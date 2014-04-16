@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"gopkg.in/v1/yaml"
 
@@ -100,8 +101,15 @@ func loadConfig(path string) {
 func logRequests(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q, _ := url.QueryUnescape(r.URL.RawQuery)
-		Info("QUERY %s %s", r.RemoteAddr, q)
+
+		// Useful if a query is crashing. Default log line is post-process though
+		// so that timing information is front and center.
+		Debug("PREQUERY %s %s", r.RemoteAddr, q)
+
+		now := time.Now()
 		handler.ServeHTTP(w, r)
+
+		Info("QUERY %s %.3f \"%s\"", r.RemoteAddr, time.Now().Sub(now).Seconds(), q)
 	})
 }
 
