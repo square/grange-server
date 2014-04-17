@@ -33,7 +33,9 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	result, err := grange.EvalRange(q, &state)
 
 	if err == nil {
-		fmt.Fprint(w, strings.Join(result, "\n"))
+		for x := range result.Iter() {
+			fmt.Fprint(w, x, "\n")
+		}
 	} else {
 		http.Error(w, fmt.Sprintf("%s", err.Error()), 422)
 	}
