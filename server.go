@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -24,11 +25,18 @@ var (
 	parse         bool
 	state         grange.RangeState
 	configPath    string
+  yamlPath      string
 )
 
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO: Handle error
+func queryHandler(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+
+	// TODO: Handle error?
 	q, _ := url.QueryUnescape(r.URL.RawQuery)
+
+	// Useful if a query is crashing. Default log line is post-process though
+	// so that timing information is front and center.
+	Debug("PREQUERY %s %s", r.RemoteAddr, q)
 
 	result, err := grange.EvalRange(q, &state)
 
@@ -39,6 +47,21 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		http.Error(w, fmt.Sprintf("%s", err.Error()), 422)
 	}
+
+	Info("QUERY %s %.3f \"%s\"", r.RemoteAddr, time.Now().Sub(now).Seconds(), q)
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request) {
+	response := map[string]string{
+		"status": "ok",
+	}
+	str, err := json.Marshal(response)
+	if err != nil {
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(str)
+	w.Write([]byte("\n")) // Be nice to curl
 }
 
 func init() {
@@ -62,9 +85,10 @@ func main() {
 	} else {
 		Info("Listening to %v", httpAddr)
 
-		http.HandleFunc("/", rootHandler)
+		http.HandleFunc("/_status", statusHandler)
+		http.HandleFunc("/", queryHandler)
 		Fatal("Server crashed: %s",
-			http.ListenAndServe(httpAddr, logRequests(http.DefaultServeMux)))
+			http.ListenAndServe(httpAddr, http.DefaultServeMux))
 		os.Exit(1)
 	}
 }
@@ -98,21 +122,6 @@ func loadConfig(path string) {
 
 	currentConfig.loglevel = config["loglevel"].(string)
 	setLogLevel(currentConfig.loglevel)
-}
-
-func logRequests(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q, _ := url.QueryUnescape(r.URL.RawQuery)
-
-		// Useful if a query is crashing. Default log line is post-process though
-		// so that timing information is front and center.
-		Debug("PREQUERY %s %s", r.RemoteAddr, q)
-
-		now := time.Now()
-		handler.ServeHTTP(w, r)
-
-		Info("QUERY %s %.3f \"%s\"", r.RemoteAddr, time.Now().Sub(now).Seconds(), q)
-	})
 }
 
 func loadState() {
