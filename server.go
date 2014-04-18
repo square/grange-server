@@ -23,7 +23,7 @@ var (
 	currentConfig serverConfig
 	port          int
 	parse         bool
-	state         grange.RangeState
+	state         *grange.RangeState
 	configPath    string
 )
 
@@ -37,7 +37,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	// so that timing information is front and center.
 	Debug("PREQUERY %s %s", r.RemoteAddr, q)
 
-	result, err := grange.EvalRange(q, &state)
+	result, err := grange.EvalRange(q, state)
 
 	if err == nil {
 		for x := range result.Iter() {
@@ -70,11 +70,10 @@ func init() {
 }
 
 func main() {
-	Info("Hello friends, server starting...")
+	Info("Hello friends, server starting with PID %d", os.Getpid())
 	configPath = "grange.yaml" // TODO: Read from command line
 
 	loadConfig(configPath)
-	loadState()
 	httpAddr := fmt.Sprintf(":%v", port)
 
 	go handleSignals()
@@ -123,10 +122,13 @@ func loadConfig(path string) {
 	currentConfig.loglevel = config["loglevel"].(string)
 	currentConfig.yamlpath = config["yamlpath"].(string)
 	setLogLevel(currentConfig.loglevel)
+
+	newState := loadState()
+	state = newState
 }
 
-func loadState() {
-	state = grange.NewState()
+func loadState() *grange.RangeState {
+	state := grange.NewState()
 	dir := currentConfig.yamlpath
 
 	Info("Loading state from YAML in path: %s", dir)
@@ -157,6 +159,8 @@ func loadState() {
 			}
 		}
 	}
+
+	return &state
 }
 
 // Converts a generic YAML map to a cluster by extracting all the correctly
