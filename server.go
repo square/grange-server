@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -23,6 +24,7 @@ var (
 	currentConfig serverConfig
 	port          int
 	parse         bool
+	help          bool
 	state         *grange.RangeState
 	configPath    string
 )
@@ -30,8 +32,11 @@ var (
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 
-	// TODO: Handle error?
-	q, _ := url.QueryUnescape(r.URL.RawQuery)
+	q, err := url.QueryUnescape(r.URL.RawQuery)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Could not unescape: %s", r.URL.RawQuery), 422)
+		return
+	}
 
 	// Useful if a query is crashing. Default log line is post-process though
 	// so that timing information is front and center.
@@ -64,14 +69,39 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
+	flag.Usage = func() {
+		fmt.Println("  usage: grange-server [opts] [CONFIGFILE]")
+		fmt.Println("example: grange-server -port=8888 grange.yaml")
+		fmt.Println()
+
+		flag.PrintDefaults()
+
+		fmt.Println()
+	}
 	flag.IntVar(&port, "port", 8080, "HTTP Server Port")
-	flag.BoolVar(&parse, "parse", false, "do not start server. Non-zero exit code on parse warnings.")
+	flag.BoolVar(&parse, "parse", false, "Do not start server. Non-zero exit code on parse warnings.")
+	flag.BoolVar(&help, "help", false, "Show this message.")
 	flag.Parse()
 }
 
 func main() {
+	if help {
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	Info("Hello friends, server starting with PID %d", os.Getpid())
-	configPath = "grange.yaml" // TODO: Read from command line
+	switch flag.NArg() {
+	case 0:
+		Info("No config file in arguments, using default config")
+		configPath = ""
+	case 1:
+		configPath = flag.Arg(0)
+		Info("Using config file: %s", configPath)
+	default:
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	warnings := loadConfig(configPath)
 	httpAddr := fmt.Sprintf(":%v", port)
@@ -119,20 +149,36 @@ func handleSignals() {
 // Returns number of warnings emited while loading, or negative number for
 // fatal error.
 func loadConfig(path string) int {
-	dat, err := ioutil.ReadFile(path) // TODO: error handling
-	if err != nil {
-		Fatal("Could not read config file: %s", path)
-		Fatal(err.Error())
-		return -1
+	if len(path) > 0 {
+		dat, err := ioutil.ReadFile(path)
+		if err != nil {
+			Fatal("Could not read config file: %s", path)
+			Fatal(err.Error())
+			return -1
+		}
+		var config map[string]interface{}
+		_ = yaml.Unmarshal(dat, &config)
+
+		if config["loglevel"] != nil {
+			Debug("Setting loglevel from config: %s", config["loglevel"])
+			currentConfig.loglevel = config["loglevel"].(string)
+		} else {
+			Debug("No loglevel found in config: %s")
+		}
+
+		if config["yamlpath"] != nil {
+			Debug("Setting yamlpath from config: %s", config["yamlpath"])
+			currentConfig.yamlpath = config["yamlpath"].(string)
+		} else {
+			Debug("No yamlpath found in config: %s")
+		}
+		setLogLevel(currentConfig.loglevel)
+	} else {
+		// No config file, use defaults
+		currentConfig.loglevel = "INFO"
+		currentConfig.yamlpath = "clusters"
+		setLogLevel(currentConfig.loglevel)
 	}
-	var config map[string]interface{} // TODO: Why can't deserialize directly into config struct?
-	_ = yaml.Unmarshal(dat, &config)
-
-	// TODO: Validate config
-
-	currentConfig.loglevel = config["loglevel"].(string)
-	currentConfig.yamlpath = config["yamlpath"].(string)
-	setLogLevel(currentConfig.loglevel)
 
 	newState, warnings := loadState()
 	state = newState
@@ -154,10 +200,10 @@ func loadState() (*grange.RangeState, int) {
 			continue
 		}
 		name := strings.TrimSuffix(basename, ext)
-		fullpath := dir + "/" + basename
+		fullpath := path.Join(dir, basename)
 		Debug("Loading %%%s from %s", name, fullpath)
 
-		dat, _ := ioutil.ReadFile(fullpath) // TODO: Cross-platform file join?
+		dat, _ := ioutil.ReadFile(fullpath)
 
 		m := make(map[string]interface{})
 		_ = yaml.Unmarshal(dat, &m)
