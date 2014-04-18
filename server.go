@@ -239,6 +239,8 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) (grange.Clus
 			c[key] = []string{value.(string)}
 		case int:
 			c[key] = []string{fmt.Sprintf("%d", value.(int))}
+		case bool:
+			c[key] = []string{fmt.Sprintf("%s", value.(bool))}
 		case []interface{}:
 			result := []string{}
 
@@ -248,6 +250,8 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) (grange.Clus
 					result = append(result, fmt.Sprintf("%s", x))
 				case int:
 					result = append(result, fmt.Sprintf("%d", x))
+				case bool:
+					result = append(result, fmt.Sprintf("%s", x))
 				default:
 					Warn("Discarding invalid value '%v' in %%%s:%s",
 						x, clusterName, key)

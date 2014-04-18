@@ -1,0 +1,25 @@
+# At minimum a cluster must contain a CLUSTER value. This is the default set of
+# values returned with the default cluster query: %dc2-mysql
+CLUSTER: "$ALL - $DOWN"
+
+# All other key names are arbitrary
+ALL:
+  - node3.example.com
+  - node4.example.com
+  - node5.example.com
+DOWN:
+  - node5.example.com
+
+# Scalars are converted to one-element string arrays before being passed into
+# grange.
+TYPE: "mysql"
+UP: false
+PORT: 3306
+
+# nil values are ignored
+EXTRA:
+
+# It is safest to quote strings that could contain special characters. In
+# particular, don't forget to use the q() function to prevent range evaluation
+# of a constant.
+DOC: "q(http://go/mysql)"

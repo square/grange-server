@@ -1,0 +1,11 @@
+# A group contains one or more values
+dc1:
+  - node1.example.com
+  - node2.example.com
+
+# Each value can itself be a range expression.
+dc2:
+  - node3..9.example.com
+
+# You can reference other groups with the local lookup operator
+all: "$dc1,$dc2"
