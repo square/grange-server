@@ -181,6 +181,7 @@ func loadConfig(path string) int {
 	}
 
 	newState, warnings := loadState()
+	newState.PrimeCache()
 	state = newState
 	return warnings
 }
