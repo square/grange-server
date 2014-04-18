@@ -56,6 +56,8 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
+	Debug("STATUS /_status")
+
 	response := map[string]string{
 		"status": "ok",
 	}
