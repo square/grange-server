@@ -25,7 +25,6 @@ var (
 	parse         bool
 	state         grange.RangeState
 	configPath    string
-  yamlPath      string
 )
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +95,7 @@ func main() {
 // Dynamically reloadable server configuration.
 type serverConfig struct {
 	loglevel string
+	yamlpath string
 }
 
 func handleSignals() {
@@ -121,14 +121,15 @@ func loadConfig(path string) {
 	// TODO: Validate config
 
 	currentConfig.loglevel = config["loglevel"].(string)
+	currentConfig.yamlpath = config["yamlpath"].(string)
 	setLogLevel(currentConfig.loglevel)
 }
 
 func loadState() {
-	Info("Loading state from YAML")
-
 	state = grange.NewState()
-	dir := "clusters" // TODO: Configurable
+	dir := currentConfig.yamlpath
+
+	Info("Loading state from YAML in path: %s", dir)
 
 	files, _ := ioutil.ReadDir(dir)
 	for _, f := range files {
