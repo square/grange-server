@@ -65,7 +65,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	flag.IntVar(&port, "port", 8080, "HTTP Server Port")
-	flag.BoolVar(&parse, "parse", false, "do not start server")
+	flag.BoolVar(&parse, "parse", false, "do not start server. Non-zero exit code on parse warnings.")
 	flag.Parse()
 }
 
@@ -73,13 +73,20 @@ func main() {
 	Info("Hello friends, server starting with PID %d", os.Getpid())
 	configPath = "grange.yaml" // TODO: Read from command line
 
-	loadConfig(configPath)
+	warnings := loadConfig(configPath)
 	httpAddr := fmt.Sprintf(":%v", port)
+
+	if warnings < 0 {
+		os.Exit(1)
+	}
 
 	go handleSignals()
 
 	if parse {
 		Info("Not starting server because of -parse option")
+		if warnings > 0 {
+			os.Exit(1)
+		}
 	} else {
 		Info("Listening to %v", httpAddr)
 
@@ -109,10 +116,14 @@ func handleSignals() {
 	}
 }
 
-func loadConfig(path string) {
+// Returns number of warnings emited while loading, or negative number for
+// fatal error.
+func loadConfig(path string) int {
 	dat, err := ioutil.ReadFile(path) // TODO: error handling
 	if err != nil {
-		panic(err)
+		Fatal("Could not read config file: %s", path)
+		Fatal(err.Error())
+		return -1
 	}
 	var config map[string]interface{} // TODO: Why can't deserialize directly into config struct?
 	_ = yaml.Unmarshal(dat, &config)
@@ -123,13 +134,15 @@ func loadConfig(path string) {
 	currentConfig.yamlpath = config["yamlpath"].(string)
 	setLogLevel(currentConfig.loglevel)
 
-	newState := loadState()
+	newState, warnings := loadState()
 	state = newState
+	return warnings
 }
 
-func loadState() *grange.RangeState {
+func loadState() (*grange.RangeState, int) {
 	state := grange.NewState()
 	dir := currentConfig.yamlpath
+	warnings := 0
 
 	Info("Loading state from YAML in path: %s", dir)
 
@@ -148,9 +161,11 @@ func loadState() *grange.RangeState {
 
 		m := make(map[string]interface{})
 		_ = yaml.Unmarshal(dat, &m)
-		c := yamlToCluster(name, m)
+		c, w := yamlToCluster(name, m)
+		warnings += w
 		if len(c) == 0 {
 			Warn("%%%s is empty, discarding", name)
+			warnings++
 		} else {
 			if name == "GROUPS" {
 				grange.SetGroups(&state, c)
@@ -160,13 +175,15 @@ func loadState() *grange.RangeState {
 		}
 	}
 
-	return &state
+	return &state, warnings
 }
 
 // Converts a generic YAML map to a cluster by extracting all the correctly
 // typed strings and discarding invalid values.
-func yamlToCluster(clusterName string, yaml map[string]interface{}) grange.Cluster {
+func yamlToCluster(clusterName string, yaml map[string]interface{}) (grange.Cluster, int) {
 	c := grange.Cluster{}
+
+	warnings := 0
 
 	for key, value := range yaml {
 		switch value.(type) {
@@ -188,12 +205,14 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) grange.Clust
 				default:
 					Warn("Discarding invalid value '%v' in %%%s:%s",
 						x, clusterName, key)
+					warnings++
 				}
 			}
 			c[key] = result
 		default:
 			Warn("Discarding invalid key %%%s:%s", clusterName, key)
+			warnings++
 		}
 	}
-	return c
+	return c, warnings
 }

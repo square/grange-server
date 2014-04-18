@@ -14,6 +14,7 @@ Features
 --------
 
 * Read-only serving of cluster YAML files on disk.
-* `-parse` option to dry-run parse source files and not start the server.
+* `-parse` option to dry-run parse source files and not start the server. Will
+  return non-zero exit code if any warnings were emitted.
 * Reloads configuration file in response to HUP signal. Allows dynamic log
   level and cluster changes.
