@@ -25,7 +25,7 @@ var (
 	port          int
 	parse         bool
 	help          bool
-	state         *grange.RangeState
+	state         *grange.State
 	configPath    string
 )
 
@@ -42,7 +42,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	// so that timing information is front and center.
 	Debug("PREQUERY %s %s", r.RemoteAddr, q)
 
-	result, err := grange.EvalRange(q, state)
+	result, err := state.Query(q)
 
 	if err == nil {
 		for x := range result.Iter() {
@@ -188,7 +188,7 @@ func loadConfig(path string) int {
 	return warnings
 }
 
-func loadState() (*grange.RangeState, int) {
+func loadState() (*grange.State, int) {
 	state := grange.NewState()
 	dir := currentConfig.yamlpath
 	warnings := 0
@@ -217,9 +217,9 @@ func loadState() (*grange.RangeState, int) {
 			warnings++
 		} else {
 			if name == "GROUPS" {
-				grange.SetGroups(&state, c)
+        state.SetGroups(c)
 			} else {
-				grange.AddCluster(&state, name, c)
+        state.AddCluster(name, c)
 			}
 		}
 	}
