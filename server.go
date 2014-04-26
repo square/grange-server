@@ -105,21 +105,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	warnings := loadConfig(configPath)
-	httpAddr := fmt.Sprintf(":%v", port)
-
-	if warnings < 0 {
-		os.Exit(1)
-	}
-
-	go handleSignals()
-
 	if parse {
+		warnings := loadConfig(configPath)
 		Info("Not starting server because of -parse option")
 		if warnings > 0 {
 			os.Exit(1)
 		}
 	} else {
+		configChannel := make(chan string)
+		doneChannel := make(chan bool)
+
+		go handleSignals(configChannel)
+		go configLoop(configChannel, doneChannel)
+
+		configChannel <- configPath
+
+		// Wait for at least one config to be loaded before serving traffic.
+		<-doneChannel
+
+		// No longer care about listening to this channel
+		go sink(doneChannel)
+
+		httpAddr := fmt.Sprintf(":%v", port)
 		Info("Listening to %v", httpAddr)
 
 		http.HandleFunc("/_status", statusHandler)
@@ -136,14 +143,26 @@ type serverConfig struct {
 	yamlpath string
 }
 
-func handleSignals() {
+func sink(channel chan bool) {
+	for _ = range channel {
+	}
+}
+
+func configLoop(configChannel chan string, doneChannel chan bool) {
+	for path := range configChannel {
+		loadConfig(path)
+		doneChannel <- true
+	}
+}
+
+func handleSignals(configChannel chan string) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
 	for sig := range c {
 		switch sig {
 		case syscall.SIGHUP:
-			Info("Reloading config in response to HUP")
-			loadConfig(configPath)
+			Info("Scheduling config reload in response to HUP")
+			configChannel <- configPath
 		}
 	}
 }
@@ -184,6 +203,7 @@ func loadConfig(path string) int {
 
 	newState, warnings := loadState()
 	newState.PrimeCache()
+	Info("Switching in new state with primed cache")
 	state = newState
 	return warnings
 }
