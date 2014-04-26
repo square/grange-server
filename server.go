@@ -140,7 +140,7 @@ func main() {
 // Dynamically reloadable server configuration.
 type serverConfig struct {
 	loglevel string
-	yamlpath string
+	yamlpath []string
 }
 
 func sink(channel chan bool) {
@@ -188,8 +188,21 @@ func loadConfig(path string) int {
 		}
 
 		if config["yamlpath"] != nil {
-			Debug("Setting yamlpath from config: %s", config["yamlpath"])
-			currentConfig.yamlpath = config["yamlpath"].(string)
+			var paths []string
+
+			switch config["yamlpath"].(type) {
+			case string:
+				paths = []string{config["yamlpath"].(string)}
+			case []interface{}:
+				for _, path := range config["yamlpath"].([]interface{}) {
+					paths = append(paths, path.(string))
+				}
+			}
+
+			for _, path := range paths {
+				Debug("Adding yamlpath from config: %s", path)
+			}
+			currentConfig.yamlpath = paths
 		} else {
 			Debug("No yamlpath found in config: %s")
 		}
@@ -197,7 +210,7 @@ func loadConfig(path string) int {
 	} else {
 		// No config file, use defaults
 		currentConfig.loglevel = "INFO"
-		currentConfig.yamlpath = "clusters"
+		currentConfig.yamlpath = []string{"clusters"}
 		setLogLevel(currentConfig.loglevel)
 	}
 
@@ -210,36 +223,39 @@ func loadConfig(path string) int {
 
 func loadState() (*grange.State, int) {
 	state := grange.NewState()
-	dir := currentConfig.yamlpath
 	warnings := 0
 
-	Info("Loading state from YAML in path: %s", dir)
+	for _, dir := range currentConfig.yamlpath {
 
-	files, _ := ioutil.ReadDir(dir)
-	for _, f := range files {
-		basename := f.Name()
-		ext := filepath.Ext(basename)
-		if ext != ".yaml" {
-			continue
-		}
-		name := strings.TrimSuffix(basename, ext)
-		fullpath := path.Join(dir, basename)
-		Debug("Loading %%%s from %s", name, fullpath)
+		Info("Loading state from YAML in path: %s", dir)
 
-		dat, _ := ioutil.ReadFile(fullpath)
+		files, _ := ioutil.ReadDir(dir)
+		for _, f := range files {
+			basename := f.Name()
+			ext := filepath.Ext(basename)
+			if ext != ".yaml" {
+				continue
+			}
+			name := strings.TrimSuffix(basename, ext)
+			fullpath := path.Join(dir, basename)
+			Debug("Loading %%%s from %s", name, fullpath)
 
-		m := make(map[string]interface{})
-		_ = yaml.Unmarshal(dat, &m)
-		c, w := yamlToCluster(name, m)
-		warnings += w
-		if len(c) == 0 {
-			Warn("%%%s is empty, discarding", name)
-			warnings++
-		} else {
-			if name == "GROUPS" {
-        state.SetGroups(c)
+			dat, _ := ioutil.ReadFile(fullpath)
+
+			m := make(map[string]interface{})
+			_ = yaml.Unmarshal(dat, &m)
+			c, w := yamlToCluster(name, m)
+			warnings += w
+			if len(c) == 0 {
+				Warn("%%%s is empty, discarding", name)
+				warnings++
 			} else {
-        state.AddCluster(name, c)
+				if name == "GROUPS" {
+					// TODO: Additive groups to support multiple directories
+					state.SetGroups(c)
+				} else {
+					state.AddCluster(name, c)
+				}
 			}
 		}
 	}
