@@ -223,6 +223,7 @@ func loadConfig(path string) int {
 
 func loadState() (*grange.State, int) {
 	state := grange.NewState()
+	state.SetDefaultCluster("GROUPS")
 	warnings := 0
 
 	for _, dir := range currentConfig.yamlpath {
@@ -250,12 +251,7 @@ func loadState() (*grange.State, int) {
 				Warn("%%%s is empty, discarding", name)
 				warnings++
 			} else {
-				if name == "GROUPS" {
-					// TODO: Additive groups to support multiple directories
-					state.SetGroups(c)
-				} else {
-					state.AddCluster(name, c)
-				}
+				state.AddCluster(name, c)
 			}
 		}
 	}
