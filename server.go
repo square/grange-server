@@ -215,7 +215,9 @@ func loadConfig(path string) int {
 	}
 
 	newState, warnings := loadState()
-	newState.PrimeCache()
+	for _, err := range newState.PrimeCache() {
+		Warn(err.Error())
+	}
 	Info("Switching in new state with primed cache")
 	state = newState
 	return warnings
