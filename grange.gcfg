@@ -1,0 +1,4 @@
+[rangeserver]
+loglevel=DEBUG
+yamlpath=clusters
+yamlpath=/var/range
