@@ -33,15 +33,19 @@ Usage
 Put some range YAML files in `clusters/`, then:
 
 ```
-    $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.yaml
+  $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.yaml
 ```
+
+Simple expansion
 
 ```
   $GOPATH/bin/erg -v 1..2
 ```
 
+Find all clusters that have type key set to "mysql"
+
 ```
-    $GOPATH/bin/erg -v '%{has(TYPE;mysql)}'
+  $GOPATH/bin/erg -v '%{has(TYPE;mysql)}'
 ```
 
 Features
