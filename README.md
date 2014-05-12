@@ -28,7 +28,7 @@ Usage
 
 Put some range YAML files in `clusters/`, then:
 
-    $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.yaml
+    $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.gcfg
 
 Simple expansion (with [erg client](https://github.com/xaviershay/erg)):
 

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"code.google.com/p/gcfg"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/xaviershay/grange"
+	"gopkg.in/v1/yaml"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -14,10 +17,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"gopkg.in/v1/yaml"
-
-	"github.com/xaviershay/grange"
 )
 
 var (
@@ -73,7 +72,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 func init() {
 	flag.Usage = func() {
 		fmt.Println("  usage: grange-server [opts] [CONFIGFILE]")
-		fmt.Println("example: grange-server -port=8888 grange.yaml")
+		fmt.Println("example: grange-server -port=8888 grange.gcfg")
 		fmt.Println()
 
 		flag.PrintDefaults()
@@ -171,38 +170,30 @@ func handleSignals(configChannel chan string) {
 // fatal error.
 func loadConfig(path string) int {
 	if len(path) > 0 {
-		dat, err := ioutil.ReadFile(path)
-		if err != nil {
-			Fatal("Could not read config file: %s", path)
-			Fatal(err.Error())
-			return -1
-		}
-		var config map[string]interface{}
-		_ = yaml.Unmarshal(dat, &config)
+		cfg := struct {
+			Rangeserver struct {
+				Loglevel string
+				Yamlpath []string
+			}
+		}{}
 
-		if config["loglevel"] != nil {
-			Debug("Setting loglevel from config: %s", config["loglevel"])
-			currentConfig.loglevel = config["loglevel"].(string)
+		err := gcfg.ReadFileInto(&cfg, path)
+		if err != nil {
+			Warn("Failed to parse gcfg data: %s", err)
+		}
+
+		if cfg.Rangeserver.Loglevel != "" {
+			Debug("Setting loglevel from config: %s", cfg.Rangeserver.Loglevel)
+			currentConfig.loglevel = cfg.Rangeserver.Loglevel
 		} else {
 			Debug("No loglevel found in config: %s")
 		}
 
-		if config["yamlpath"] != nil {
-			var paths []string
-
-			switch config["yamlpath"].(type) {
-			case string:
-				paths = []string{config["yamlpath"].(string)}
-			case []interface{}:
-				for _, path := range config["yamlpath"].([]interface{}) {
-					paths = append(paths, path.(string))
-				}
-			}
-
-			for _, path := range paths {
+		if len(cfg.Rangeserver.Yamlpath) > 0 {
+			for _, path := range cfg.Rangeserver.Yamlpath {
 				Debug("Adding yamlpath from config: %s", path)
 			}
-			currentConfig.yamlpath = paths
+			currentConfig.yamlpath = cfg.Rangeserver.Yamlpath
 		} else {
 			Debug("No yamlpath found in config: %s")
 		}
