@@ -7,17 +7,46 @@ concepts and query language.
 
 Cluster and group data is specified in YAML files.
 
+
+Installation
+-----
+
+1. Setup your go environment if needed
+
+Example
+
+```
+mkdir $HOME/go
+export GOPATH=$HOME/go
+```
+
+2. Install grange-server and erg client
+
+```
+go get -v -u github.com/xaviershay/grange-server
+go get -v -u github.com/xaviershay/erg
+```
+
 Usage
 -----
 
 Put some range YAML files in `clusters/`, then:
 
-    go build
+```
+  $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.yaml
+```
 
-    ./grange-server --port=8888 grange.yaml
+Simple expansion
 
-    gem install rangeclient
-    er -v localhost -p 8888 '%{has(TYPE;mysql)}'
+```
+  $GOPATH/bin/erg -v 1..2
+```
+
+Find all clusters that have type key set to "mysql"
+
+```
+  $GOPATH/bin/erg -v '%{has(TYPE;mysql)}'
+```
 
 Features
 --------
