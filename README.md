@@ -15,38 +15,28 @@ Installation
 
 Example
 
-```
-mkdir $HOME/go
-export GOPATH=$HOME/go
-```
+    mkdir $HOME/go
+    export GOPATH=$HOME/go
 
 2. Install grange-server and erg client
 
-```
-go get -v -u github.com/xaviershay/grange-server
-go get -v -u github.com/xaviershay/erg
-```
+    go get -v -u github.com/xaviershay/grange-server
+    go get -v -u github.com/xaviershay/erg
 
 Usage
 -----
 
 Put some range YAML files in `clusters/`, then:
 
-```
-  $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.yaml
-```
+    $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.yaml
 
-Simple expansion
+Simple expansion (with [erg client](https://github.com/xaviershay/erg)):
 
-```
-  $GOPATH/bin/erg -v 1..2
-```
+    erg -v 1..2
 
-Find all clusters that have type key set to "mysql"
+Find all clusters that have type key set to "mysql":
 
-```
-  $GOPATH/bin/erg -v '%{has(TYPE;mysql)}'
-```
+    erg -v '%{has(TYPE;mysql)}'
 
 Features
 --------
