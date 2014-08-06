@@ -31,6 +31,14 @@ var (
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 
+	// Setup CORS Headers for OPTIONS request
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
 	q, err := url.QueryUnescape(r.URL.RawQuery)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Could not unescape: %s", r.URL.RawQuery), 422)
