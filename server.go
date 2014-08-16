@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/armon/consul-api"
 	"github.com/xaviershay/grange"
 	"gopkg.in/v1/yaml"
 	"io/ioutil"
@@ -14,10 +15,10 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"time"
-  "github.com/armon/consul-api"
 )
 
 var (
@@ -113,14 +114,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	configChannel := make(chan string)
 	if parse {
-		warnings := loadConfig(configPath)
+		cancel := make(chan bool)
+		warnings := loadConfig(configPath, configChannel, cancel)
+		close(cancel)
 		Info("Not starting server because of -parse option")
 		if warnings > 0 {
 			os.Exit(1)
 		}
 	} else {
-		configChannel := make(chan string)
 		doneChannel := make(chan bool)
 
 		go handleSignals(configChannel)
@@ -149,7 +152,7 @@ func main() {
 type serverConfig struct {
 	loglevel string
 	yamlpath []string
-  consul bool
+	consul   bool
 }
 
 func sink(channel chan bool) {
@@ -158,8 +161,11 @@ func sink(channel chan bool) {
 }
 
 func configLoop(configChannel chan string, doneChannel chan bool) {
+	cancel := make(chan bool)
 	for path := range configChannel {
-		loadConfig(path)
+		close(cancel)
+		cancel = make(chan bool)
+		loadConfig(path, configChannel, cancel)
 		doneChannel <- true
 	}
 }
@@ -178,13 +184,13 @@ func handleSignals(configChannel chan string) {
 
 // Returns number of warnings emited while loading, or negative number for
 // fatal error.
-func loadConfig(path string) int {
+func loadConfig(path string, configChannel chan string, cancel chan bool) int {
 	if len(path) > 0 {
 		cfg := struct {
 			Rangeserver struct {
 				Loglevel string
 				Yamlpath []string
-        Consul bool
+				Consul   bool
 			}
 		}{}
 
@@ -210,16 +216,16 @@ func loadConfig(path string) int {
 		}
 		setLogLevel(currentConfig.loglevel)
 
-    currentConfig.consul = cfg.Rangeserver.Consul
+		currentConfig.consul = cfg.Rangeserver.Consul
 	} else {
 		// No config file, use defaults
 		currentConfig.loglevel = "INFO"
-    currentConfig.consul = false
+		currentConfig.consul = false
 		currentConfig.yamlpath = []string{"clusters"}
 		setLogLevel(currentConfig.loglevel)
 	}
 
-	newState, warnings := loadState()
+	newState, warnings := loadState(configChannel, cancel)
 	for _, err := range newState.PrimeCache() {
 		Warn(err.Error())
 	}
@@ -228,43 +234,108 @@ func loadConfig(path string) int {
 	return warnings
 }
 
-func loadStateFromConsul(state *grange.State) {
-  Debug("consul: Fetching services")
-  client, err := consulapi.NewClient(consulapi.DefaultConfig())
-  if err != nil {
-    Warn("consul: Could not create client: %s", err.Error())
-    return
-  }
-  catalog := client.Catalog()
-  services, _, err := catalog.Services(nil)
-  if err != nil {
-    Warn("consul: Could not fetch services: %s", err.Error())
-    return
-  }
+// After initial fetch of each API call, set up a goroutine listening for
+// changes to the results. Each routine aborts if:
+// - A change in data is noticed.
+// - The cancel channel is closed. This happens at the beginning of the next
+//   config load (no matter how it was triggered).
+//
+// When a change in data is noticed, a config reload is trigged iff no other
+// endpoint triggered once first and we haven't been canceled. There is a small
+// race condition if more than one routine wake up at the same time before the
+// main config loop is scheduled. This would cause redundant reloads, which
+// shouldn't be an issue. I have no idea how prevelant this case is with real
+// workloads.
+func loadStateFromConsul(state *grange.State, configChannel chan string, cancel chan bool) {
+	client, err := consulapi.NewClient(consulapi.DefaultConfig())
+	if err != nil {
+		Warn("consul: Could not create client: %s", err.Error())
+		return
+	}
 
-  for name, _ := range services {
-    c := grange.Cluster{}
-    Debug("consul: Fetching nodes for %s", name)
-    nodes, _, err := catalog.Service(name, "", nil)
-    if err != nil {
-      Warn("consul: Could not fetch nodes for %s: %s", name, err.Error())
-      continue
-    }
-    for _, entry := range nodes {
-      c["CLUSTER"] = append(c["CLUSTER"], entry.Node)
-    }
-    state.AddCluster(name, c)
-  }
+	Debug("consul: Fetching services")
+	catalog := client.Catalog()
+	services, meta, err := catalog.Services(nil)
+	if err != nil {
+		Warn("consul: Could not fetch services: %s", err.Error())
+		return
+	}
+	go func(oldServices map[string][]string, lastIndex uint64) {
+		newServices := oldServices
+		for {
+			select {
+			case <-cancel:
+				return
+			default:
+				// Maybe speed this up without using reflection?
+				if !reflect.DeepEqual(oldServices, newServices) {
+					configChannel <- configPath
+					return
+				}
+
+				queryOptions := consulapi.QueryOptions{
+					WaitIndex: lastIndex,
+					WaitTime:  5 * time.Second,
+				}
+				newServices, meta, err = catalog.Services(&queryOptions)
+				if err != nil {
+					Warn("consul: aborting refresh thread: %s", err.Error())
+					return
+				}
+				lastIndex = meta.LastIndex
+			}
+		}
+	}(services, meta.LastIndex)
+
+	for name, _ := range services {
+		c := grange.Cluster{}
+		Debug("consul: Fetching nodes for %s", name)
+		nodes, meta, err := catalog.Service(name, "", nil)
+		go func(name string, oldValue []*consulapi.CatalogService, lastIndex uint64) {
+			newValue := oldValue
+			for {
+				select {
+				case <-cancel:
+					return
+				default:
+					// Maybe speed this up without using reflection?
+					if !reflect.DeepEqual(oldValue, newValue) {
+						configChannel <- configPath
+						return
+					}
+
+					queryOptions := consulapi.QueryOptions{
+						WaitIndex: lastIndex,
+						WaitTime:  5 * time.Second,
+					}
+					newValue, meta, err = catalog.Service(name, "", &queryOptions)
+					if err != nil {
+						Warn("consul: aborting refresh thread: %s", err.Error())
+						return
+					}
+					lastIndex = meta.LastIndex
+				}
+			}
+		}(name, nodes, meta.LastIndex)
+		if err != nil {
+			Warn("consul: Could not fetch nodes for %s: %s", name, err.Error())
+			continue
+		}
+		for _, entry := range nodes {
+			c["CLUSTER"] = append(c["CLUSTER"], entry.Node)
+		}
+		state.AddCluster(name, c)
+	}
 }
 
-func loadState() (*grange.State, int) {
+func loadState(configChannel chan string, cancel chan bool) (*grange.State, int) {
 	state := grange.NewState()
 	state.SetDefaultCluster("GROUPS")
 	warnings := 0
 
-  if (currentConfig.consul) {
-    loadStateFromConsul(&state)
-  }
+	if currentConfig.consul {
+		loadStateFromConsul(&state, configChannel, cancel)
+	}
 
 	for _, dir := range currentConfig.yamlpath {
 
