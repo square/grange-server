@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+  "github.com/armon/consul-api"
 )
 
 var (
@@ -148,6 +149,7 @@ func main() {
 type serverConfig struct {
 	loglevel string
 	yamlpath []string
+  consul bool
 }
 
 func sink(channel chan bool) {
@@ -182,6 +184,7 @@ func loadConfig(path string) int {
 			Rangeserver struct {
 				Loglevel string
 				Yamlpath []string
+        Consul bool
 			}
 		}{}
 
@@ -206,9 +209,12 @@ func loadConfig(path string) int {
 			Debug("No yamlpath found in config: %s")
 		}
 		setLogLevel(currentConfig.loglevel)
+
+    currentConfig.consul = cfg.Rangeserver.Consul
 	} else {
 		// No config file, use defaults
 		currentConfig.loglevel = "INFO"
+    currentConfig.consul = false
 		currentConfig.yamlpath = []string{"clusters"}
 		setLogLevel(currentConfig.loglevel)
 	}
@@ -222,10 +228,43 @@ func loadConfig(path string) int {
 	return warnings
 }
 
+func loadStateFromConsul(state *grange.State) {
+  Debug("consul: Fetching services")
+  client, err := consulapi.NewClient(consulapi.DefaultConfig())
+  if err != nil {
+    Warn("consul: Could not create client: %s", err.Error())
+    return
+  }
+  catalog := client.Catalog()
+  services, _, err := catalog.Services(nil)
+  if err != nil {
+    Warn("consul: Could not fetch services: %s", err.Error())
+    return
+  }
+
+  for name, _ := range services {
+    c := grange.Cluster{}
+    Debug("consul: Fetching nodes for %s", name)
+    nodes, _, err := catalog.Service(name, "", nil)
+    if err != nil {
+      Warn("consul: Could not fetch nodes for %s: %s", name, err.Error())
+      continue
+    }
+    for _, entry := range nodes {
+      c["CLUSTER"] = append(c["CLUSTER"], entry.Node)
+    }
+    state.AddCluster(name, c)
+  }
+}
+
 func loadState() (*grange.State, int) {
 	state := grange.NewState()
 	state.SetDefaultCluster("GROUPS")
 	warnings := 0
+
+  if (currentConfig.consul) {
+    loadStateFromConsul(&state)
+  }
 
 	for _, dir := range currentConfig.yamlpath {
 
