@@ -51,3 +51,12 @@ func Log(tag string, msg string, args ...interface{}) {
 		now.Format("2006-01-02 15:04:05.999"),
 		fmt.Sprintf(msg, args...))
 }
+
+// Used as an adapter for statsd logging
+type GrangeLogger struct {
+	Prefix string
+}
+
+func (l *GrangeLogger) Println(args ...interface{}) {
+	Info("%s: %s", l.Prefix, fmt.Sprint(args...))
+}

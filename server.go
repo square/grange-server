@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/xaviershay/grange"
+	"github.com/xaviershay/statsd" // For https://github.com/quipo/statsd/pull/9
 	"gopkg.in/v1/yaml"
 	"io/ioutil"
 	"net/http"
@@ -26,7 +27,19 @@ var (
 	help          bool
 	state         *grange.State
 	configPath    string
+	stats         subStatsd
 )
+
+// Because I'm too lazy to implement the entire noop Statsd interface
+type subStatsd interface {
+	Incr(string, int64) error
+	Close() error
+}
+
+type noopStatsd struct{}
+
+func (x *noopStatsd) Incr(y string, z int64) error { return nil }
+func (x *noopStatsd) Close() error                 { return nil }
 
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
@@ -36,11 +49,13 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET")
 
 	if r.Method == "OPTIONS" {
+		stats.Incr("20X", 1)
 		return
 	}
 
 	q, err := url.QueryUnescape(r.URL.RawQuery)
 	if err != nil {
+		stats.Incr("40X", 1)
 		http.Error(w, fmt.Sprintf("Could not unescape: %s", r.URL.RawQuery), 422)
 		return
 	}
@@ -55,7 +70,9 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 		for x := range result.Iter() {
 			fmt.Fprint(w, x, "\n")
 		}
+		stats.Incr("20X", 1)
 	} else {
+		stats.Incr("40X", 1)
 		http.Error(w, fmt.Sprintf("%s", err.Error()), 422)
 	}
 
@@ -91,9 +108,12 @@ func init() {
 	flag.BoolVar(&parse, "parse", false, "Do not start server. Non-zero exit code on parse warnings.")
 	flag.BoolVar(&help, "help", false, "Show this message.")
 	flag.Parse()
+	stats = &noopStatsd{}
 }
 
 func main() {
+	defer cleanupStatsd()
+
 	if help {
 		flag.Usage()
 		os.Exit(1)
@@ -183,6 +203,12 @@ func loadConfig(path string) int {
 				Loglevel string
 				Yamlpath []string
 			}
+
+			Statsd struct {
+				Host     string
+				Prefix   string
+				Interval float32
+			}
 		}{}
 
 		err := gcfg.ReadFileInto(&cfg, path)
@@ -204,6 +230,21 @@ func loadConfig(path string) int {
 			currentConfig.yamlpath = cfg.Rangeserver.Yamlpath
 		} else {
 			Debug("No yamlpath found in config: %s")
+		}
+
+		host := cfg.Statsd.Host
+		if host != "" {
+			Info("Connecting to statsd: %s", host)
+			cleanupStatsd()
+			statsdclient := statsd.NewStatsdClient(host, cfg.Statsd.Prefix)
+			statsdclient.CreateSocket()
+			if cfg.Statsd.Interval > 0 {
+				bufferedStats := statsd.NewStatsdBuffer(time.Second*time.Duration(cfg.Statsd.Interval), statsdclient)
+				bufferedStats.Logger = &GrangeLogger{Prefix: "statsd"}
+				stats = bufferedStats
+			} else {
+				stats = statsdclient
+			}
 		}
 		setLogLevel(currentConfig.loglevel)
 	} else {
@@ -258,6 +299,11 @@ func loadState() (*grange.State, int) {
 	}
 
 	return &state, warnings
+}
+
+func cleanupStatsd() {
+	stats.Close()
+	stats = &noopStatsd{}
 }
 
 // Converts a generic YAML map to a cluster by extracting all the correctly

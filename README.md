@@ -46,9 +46,10 @@ Features
   return non-zero exit code if any warnings were emitted.
 * Reloads configuration file in response to HUP signal. Allows dynamic log
   level and cluster changes.
+* Can report HTTP response metrics to statsd.
 
 Format
 ------
 
 See the `clusters` directory for sample YAML files. At minimum, your directory
-should contain a `GROUPS.yaml`.
+should contain a `GROUPS.yaml`. See `grange.gcfg` for a sample configuration.
