@@ -2,3 +2,8 @@
 loglevel=DEBUG
 yamlpath=clusters
 yamlpath=/var/range
+
+# [statsd]
+# host=localhost:8015
+# prefix=grange
+# interval=1 # If present, buffer writes in memory for this many seconds.
