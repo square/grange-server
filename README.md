@@ -4,7 +4,7 @@ grange-server
 =============
 
 A read-only range server frontend to
-[grange](https://github.com/xaviershay/grange). See there for documentation of
+[grange](https://github.com/square/grange). See there for documentation of
 concepts and query language.
 
 Cluster and group data is specified in YAML files.
@@ -20,17 +20,17 @@ Installation
 
 2. Install `grange-server` and `erg` client
 
-        go get -v -u github.com/xaviershay/grange-server
-        go get -v -u github.com/xaviershay/erg
+        go get -v -u github.com/square/grange-server
+        go get -v -u github.com/square/erg
 
 Usage
 -----
 
 Put some range YAML files in `clusters/`, then:
 
-    $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/xaviershay/grange-server/grange.gcfg
+    $GOPATH/bin/grange-server --port=8888 $GOPATH/src/github.com/square/grange-server/grange.gcfg
 
-Simple expansion (with [erg client](https://github.com/xaviershay/erg)):
+Simple expansion (with [erg client](https://github.com/square/erg)):
 
     erg -v 1..2
 
