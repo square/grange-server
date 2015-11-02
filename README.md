@@ -20,8 +20,8 @@ Example
 
 2. Install grange-server and erg client
 
-    go get -v -u github.com/xaviershay/grange-server
-    go get -v -u github.com/xaviershay/erg
+        go get -v -u github.com/xaviershay/grange-server
+        go get -v -u github.com/xaviershay/erg
 
 Usage
 -----
