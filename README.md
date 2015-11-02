@@ -13,12 +13,10 @@ Installation
 
 1. Setup your go environment if needed
 
-Example
+        mkdir $HOME/go
+        export GOPATH=$HOME/go
 
-    mkdir $HOME/go
-    export GOPATH=$HOME/go
-
-2. Install grange-server and erg client
+2. Install `grange-server` and `erg` client
 
         go get -v -u github.com/xaviershay/grange-server
         go get -v -u github.com/xaviershay/erg
