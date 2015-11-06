@@ -1,5 +1,3 @@
-**This repository has moved to https://github.com/square/grange-server**
-
 grange-server
 =============
 
