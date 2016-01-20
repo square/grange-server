@@ -22,7 +22,7 @@ import (
 
 var (
 	currentConfig serverConfig
-	port          int
+	port          string
 	parse         bool
 	help          bool
 	state         *grange.State
@@ -104,7 +104,7 @@ func init() {
 
 		fmt.Println()
 	}
-	flag.IntVar(&port, "port", 8080, "HTTP Server Port")
+	flag.StringVar(&port, "port", "8080", "HTTP Server Port")
 	flag.BoolVar(&parse, "parse", false, "Do not start server. Non-zero exit code on parse warnings.")
 	flag.BoolVar(&help, "help", false, "Show this message.")
 	flag.Parse()
@@ -153,7 +153,13 @@ func main() {
 		// No longer care about listening to this channel
 		go sink(doneChannel)
 
-		httpAddr := fmt.Sprintf(":%v", port)
+		var httpAddr string
+		if strings.Contains(port, ":") {
+			httpAddr = port
+		} else {
+			httpAddr = fmt.Sprintf(":%v", port)
+		}
+
 		Info("Listening to %v", httpAddr)
 
 		http.HandleFunc("/_status", statusHandler)
