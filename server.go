@@ -322,7 +322,7 @@ func yamlToCluster(clusterName string, yaml map[string]interface{}) (grange.Clus
 		case int:
 			c[key] = []string{fmt.Sprintf("%d", value.(int))}
 		case bool:
-			c[key] = []string{fmt.Sprintf("%s", value.(bool))}
+			c[key] = []string{fmt.Sprintf("%t", value.(bool))}
 		case []interface{}:
 			result := []string{}
 
