@@ -1,13 +1,13 @@
 package main
 
 import (
-	"gopkg.in/gcfg.v1"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/xaviershay/grange"
+	"github.com/square/grange"
 	"github.com/xaviershay/statsd" // For https://github.com/quipo/statsd/pull/9
-	"gopkg.in/v1/yaml"
+	"gopkg.in/gcfg.v1"
+	"gopkg.in/yaml.v1"
 	"io/ioutil"
 	"net/http"
 	"net/url"
